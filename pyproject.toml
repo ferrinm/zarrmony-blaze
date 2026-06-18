@@ -1,0 +1,48 @@
+[project]
+name = "zarrmony-blaze"
+version = "0.1.0"
+description = "Miltenyi Blaze (MACS iQ-processed) reader plugin for zarrmony."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Max Ferrin", email = "ferrin@calicolabs.com" }]
+dependencies = [
+    "zarrmony>=0.3.0",
+    "tifffile>=2024.0",
+    "dask>=2026.3.0",
+    "numpy>=2",
+    "xarray>=2025.9.0",
+]
+
+[project.entry-points."zarrmony.readers"]
+blaze = "zarrmony_blaze:plugin"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=7",
+    "ruff>=0.14",
+]
+
+[project.urls]
+Homepage = "https://github.com/ferrinm/zarrmony-blaze"
+Issues = "https://github.com/ferrinm/zarrmony-blaze/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zarrmony_blaze"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "-ra"]
