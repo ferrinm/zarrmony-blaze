@@ -18,7 +18,12 @@ import dask.array as da
 import tifffile
 import xarray as xr
 
-from ._ome_xml import BlazeMetadataError, BlazeOme, parse_master_xml
+from ._ome_xml import (
+    BlazeMetadataError,
+    BlazeMultipositionUnsupportedError,
+    BlazeOme,
+    parse_master_xml,
+)
 
 
 class BlazeError(Exception):
@@ -30,7 +35,13 @@ class BlazeMasterNotFoundError(BlazeError):
 
 
 # Re-export so callers can catch a single error namespace.
-__all__ = ["BlazeError", "BlazeMasterNotFoundError", "BlazeMetadataError", "BlazeReader"]
+__all__ = [
+    "BlazeError",
+    "BlazeMasterNotFoundError",
+    "BlazeMetadataError",
+    "BlazeMultipositionUnsupportedError",
+    "BlazeReader",
+]
 
 
 @dataclass(frozen=True)
@@ -94,9 +105,7 @@ class BlazeReader:
                     fname = o.file_map[(t, c, z)]
                     fpath = self._dir / fname
                     delayed = dask.delayed(_read_plane)(str(fpath))
-                    plane = da.from_delayed(
-                        delayed, shape=(o.size_y, o.size_x), dtype=o.dtype
-                    )
+                    plane = da.from_delayed(delayed, shape=(o.size_y, o.size_x), dtype=o.dtype)
                     z_arrs.append(plane[None, None, None, :, :])
                 c_arrs.append(da.concatenate(z_arrs, axis=2))
             t_arrs.append(da.concatenate(c_arrs, axis=1))

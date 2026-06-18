@@ -1,11 +1,17 @@
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+import tifffile
 import zarr
 from zarrmony.readers.plugin import ReaderProtocol
 
 from zarrmony_blaze import BlazeReader, plugin
+from zarrmony_blaze.adapter import (
+    BlazeMetadataError,
+    BlazeMultipositionUnsupportedError,
+)
 
 from .conftest import MultiFileFixture
 
@@ -168,3 +174,92 @@ def test_multi_file_end_to_end_convert(
     # The master XML should land verbatim in the audit's source dump.
     raw = (store / "OME" / "source" / "raw.xml").read_text()
     assert raw == BlazeReader(synthetic_blaze_multi.dir).metadata
+
+
+def _write_master_with_xml(dir_path: Path, master_name: str, xml: str) -> None:
+    """Write a single 1×1 uint16 TIFF carrying ``xml`` as its OME ImageDescription."""
+    dir_path.mkdir(parents=True, exist_ok=True)
+    data = np.zeros((1, 1), dtype=np.uint16)
+    tifffile.imwrite(dir_path / master_name, data, description=xml, metadata=None)
+
+
+_MULTIPOSITION_MASTER_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
+  <Image ID="Image:0">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData>
+        <UUID FileName="MP_Blaze_C00_Z0000.ome.tif">urn:uuid:p0</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+  <Image ID="Image:1">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData>
+        <UUID FileName="MP_Blaze_C00_Z0000.ome.tif">urn:uuid:p1</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+</OME>"""
+
+
+def test_multiposition_master_raises_from_reader_init(tmp_path: Path) -> None:
+    """A multi-<Image> master surfaces as a typed NotImplementedError from __init__."""
+    exp = tmp_path / "multipos_experiment"
+    _write_master_with_xml(exp, "MP_Blaze_C00_Z0000.ome.tif", _MULTIPOSITION_MASTER_XML)
+    with pytest.raises(BlazeMultipositionUnsupportedError) as excinfo:
+        BlazeReader(exp)
+    assert isinstance(excinfo.value, NotImplementedError)
+    assert "convert one position at a time" in str(excinfo.value)
+
+
+# SizeZ=2 promises 2 planes, but only one <TiffData> entry is supplied.
+_FILEMAP_MISMATCH_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
+  <Image ID="Image:0">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="2" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData FirstZ="0">
+        <UUID FileName="BAD_Blaze_C00_Z0000.ome.tif">urn:uuid:a</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+</OME>"""
+
+
+def test_filemap_size_mismatch_raises_from_reader_init(tmp_path: Path) -> None:
+    """A broken master XML (TiffData count ≠ SizeT*SizeC*SizeZ) is caught at init."""
+    exp = tmp_path / "broken_experiment"
+    _write_master_with_xml(exp, "BAD_Blaze_C00_Z0000.ome.tif", _FILEMAP_MISMATCH_XML)
+    with pytest.raises(BlazeMetadataError) as excinfo:
+        BlazeReader(exp)
+    msg = str(excinfo.value)
+    # Message names both the expected count and the count actually found.
+    assert "SizeT*SizeC*SizeZ" in msg
+    assert "2" in msg  # expected
+    assert "1" in msg  # found
+
+
+def test_audit_record_carries_master_xml_and_provenance(
+    synthetic_blaze_multi: MultiFileFixture, tmp_path: Path
+) -> None:
+    """End-to-end audit propagation: raw XML verbatim + reader provenance fields."""
+    out_dir = tmp_path / "out"
+    _convert_with_plugin(synthetic_blaze_multi.dir, out_dir)
+    store = next(out_dir.glob("*.ome.zarr"))
+
+    # Raw master XML is mirrored verbatim into OME/source/.
+    raw = (store / "OME" / "source" / "raw.xml").read_text()
+    assert raw == BlazeReader(synthetic_blaze_multi.dir).metadata
+
+    # Audit lives in root.attrs["zarrmony"]; reader_plugin carries provenance.
+    grp = zarr.open_group(str(store), mode="r")
+    audit = json.loads(json.dumps(dict(grp.attrs)))["zarrmony"]
+    reader_block = audit["reader_plugin"]
+    assert reader_block["name"] == "zarrmony-blaze"
+    assert reader_block["distribution"] == "zarrmony-blaze"
+    assert reader_block["source"] == "entry_point"

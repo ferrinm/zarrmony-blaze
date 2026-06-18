@@ -51,9 +51,7 @@ def _build_master_xml(
         f' PhysicalSizeZ="{pixel_size_z_um}">',
     ]
     for i, name in enumerate(channel_names):
-        parts.append(
-            f'      <Channel ID="Channel:{i}" Name="{name}" SamplesPerPixel="1"/>'
-        )
+        parts.append(f'      <Channel ID="Channel:{i}" Name="{name}" SamplesPerPixel="1"/>')
     for t in range(size_t):
         for c in range(size_c):
             for z in range(size_z):

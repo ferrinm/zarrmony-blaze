@@ -37,6 +37,16 @@ class BlazeMetadataError(Exception):
     """Master OME-XML is malformed, uses an unsupported schema, or self-inconsistent."""
 
 
+class BlazeMultipositionUnsupportedError(NotImplementedError):
+    """Master OME-XML describes more than one ``<Image>`` (multiposition export).
+
+    v0.1 emits one scene per directory and is not equipped to split a single
+    master across multiple positions. Subclass of :class:`NotImplementedError`
+    so generic ``except NotImplementedError`` handlers see it as a "feature
+    not yet built" rather than a corrupt-data signal.
+    """
+
+
 @dataclass(frozen=True)
 class BlazeOme:
     size_t: int
@@ -77,9 +87,19 @@ def parse_master_xml(xml: str) -> BlazeOme:
             "schema, _ome_xml.py needs an update."
         )
 
-    image = root.find(_q("Image"))
-    if image is None:
+    images = root.findall(_q("Image"))
+    if len(images) > 1:
+        raise BlazeMultipositionUnsupportedError(
+            f"master OME-XML contains {len(images)} <Image> elements — this is a "
+            "multiposition export, which zarrmony-blaze v0.1 does not support. "
+            "Workaround: convert one position at a time (split the export into "
+            "single-position directories before running `zarrmony convert`). "
+            "Raw multiposition reads are tracked for v0.2: "
+            "https://github.com/ferrinm/zarrmony-blaze/issues/5"
+        )
+    if not images:
         raise BlazeMetadataError("master OME-XML has no <Image> element")
+    image = images[0]
     pixels = image.find(_q("Pixels"))
     if pixels is None:
         raise BlazeMetadataError("<Image> has no <Pixels> element")

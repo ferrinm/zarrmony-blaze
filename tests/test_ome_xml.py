@@ -12,7 +12,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from zarrmony_blaze._ome_xml import BlazeMetadataError, parse_master_xml
+from zarrmony_blaze._ome_xml import (
+    BlazeMetadataError,
+    BlazeMultipositionUnsupportedError,
+    parse_master_xml,
+)
 
 # 2 channels x 2 Z; matches CONTEXT.md note about DimensionOrder XYZCT.
 _MACS_IQ_LIKE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -81,6 +85,70 @@ def test_channel_name_fallback_to_fluor_then_id() -> None:
     )
     ome = parse_master_xml(xml)
     assert ome.channel_names == ["GFP", "Channel:1"]
+
+
+_CHANNEL_FALLBACK_TIERS = """<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
+  <Image ID="Image:0">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="3" SizeT="1">
+      <Channel ID="Channel:0" Name="DAPI_405" Fluor="DAPI" SamplesPerPixel="1"/>
+      <Channel ID="Channel:1" Fluor="GFP" SamplesPerPixel="1"/>
+      <Channel ID="Channel:2" SamplesPerPixel="1"/>
+      <TiffData FirstC="0">
+        <UUID FileName="c0.ome.tif">urn:uuid:0</UUID>
+      </TiffData>
+      <TiffData FirstC="1">
+        <UUID FileName="c1.ome.tif">urn:uuid:1</UUID>
+      </TiffData>
+      <TiffData FirstC="2">
+        <UUID FileName="c2.ome.tif">urn:uuid:2</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+</OME>"""
+
+
+def test_channel_name_fallback_chain_all_three_tiers() -> None:
+    """Name wins when present; Fluor next; ID last."""
+    ome = parse_master_xml(_CHANNEL_FALLBACK_TIERS)
+    assert ome.channel_names == ["DAPI_405", "GFP", "Channel:2"]
+
+
+_MULTIPOSITION = """<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
+  <Image ID="Image:0">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData>
+        <UUID FileName="pos0.ome.tif">urn:uuid:p0</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+  <Image ID="Image:1">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData>
+        <UUID FileName="pos1.ome.tif">urn:uuid:p1</UUID>
+      </TiffData>
+    </Pixels>
+  </Image>
+</OME>"""
+
+
+def test_multiposition_master_raises_unsupported() -> None:
+    """Multi-<Image> master → typed NotImplementedError with workaround text."""
+    with pytest.raises(BlazeMultipositionUnsupportedError) as excinfo:
+        parse_master_xml(_MULTIPOSITION)
+    # Subclass of NotImplementedError so generic handlers see it as "not built yet".
+    assert isinstance(excinfo.value, NotImplementedError)
+    msg = str(excinfo.value)
+    assert "convert one position at a time" in msg
+    assert "v0.2" in msg
+    # v0.2 raw-mode tracker link.
+    assert "issues/5" in msg
 
 
 def test_parses_minimal_master() -> None:
