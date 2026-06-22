@@ -1,6 +1,6 @@
 [project]
 name = "zarrmony-blaze"
-version = "0.1.0"
+version = "0.1.1"
 description = "Miltenyi UltraMicroscope Blaze (MACS iQ-processed) reader plugin for zarrmony."
 readme = "README.md"
 requires-python = ">=3.13"

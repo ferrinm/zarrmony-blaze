@@ -14,12 +14,7 @@ zarrmony convert /path/to/<blaze-experiment-dir> ./out
 pip install zarrmony-blaze
 ```
 
-This pulls `zarrmony` from PyPI as a transitive dependency. Not yet on PyPI as
-of this writing — install from source until v0.1.0 is published:
-
-```bash
-pip install git+https://github.com/ferrinm/zarrmony-blaze
-```
+This pulls `zarrmony` from PyPI as a transitive dependency.
 
 ## Verify the plugin registered
 
