@@ -186,10 +186,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if crop:
         src_master_data = src_master_data[:crop, :crop]
+    # Real MACS iQ XML contains µ (U+00B5) and other non-ASCII chars. tifffile
+    # rejects str descriptions that aren't 7-bit ASCII but accepts pre-encoded
+    # bytes verbatim. Pass UTF-8 bytes to preserve the vendor's character set.
     tifffile.imwrite(
         args.dst / master_name,
         src_master_data,
-        description=new_xml,
+        description=new_xml.encode("utf-8"),
         metadata=None,
     )
     written += 1
