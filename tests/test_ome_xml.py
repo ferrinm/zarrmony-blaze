@@ -115,6 +115,32 @@ def test_channel_name_fallback_chain_all_three_tiers() -> None:
     assert ome.channel_names == ["DAPI_405", "GFP", "Channel:2"]
 
 
+# Real MACS iQ uses true OME 2008-02: <LogicalChannel> under <Image>,
+# not <Channel> under <Pixels>. The vendor-observed shape — drives the
+# parser's fallback that <Channel> tests don't exercise.
+_LOGICAL_CHANNEL_LEGACY = """<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
+  <Image ID="Image:0" Name="legacy">
+    <LogicalChannel ID="LogicalChannel:0" Name="Ex: 785nm Em: 845nm"
+                    EmWave="845" ExWave="785"/>
+    <LogicalChannel ID="LogicalChannel:1" Name="Ex: 488nm Em: 525nm"
+                    EmWave="525" ExWave="488"/>
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" PixelType="uint16"
+            SizeX="1" SizeY="1" SizeZ="1" SizeC="2" SizeT="1">
+      <TiffData FirstC="0"><UUID FileName="c0.ome.tif">u0</UUID></TiffData>
+      <TiffData FirstC="1"><UUID FileName="c1.ome.tif">u1</UUID></TiffData>
+    </Pixels>
+  </Image>
+</OME>"""
+
+
+def test_logical_channel_under_image_legacy_2008_02_placement() -> None:
+    """Real MACS iQ exports use <Image>/<LogicalChannel>; parser must fall back."""
+    ome = parse_master_xml(_LOGICAL_CHANNEL_LEGACY)
+    assert ome.channel_names == ["Ex: 785nm Em: 845nm", "Ex: 488nm Em: 525nm"]
+    assert ome.dtype == np.dtype("uint16")
+
+
 _MULTIPOSITION = """<?xml version="1.0" encoding="UTF-8"?>
 <OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2008-02">
   <Image ID="Image:0">

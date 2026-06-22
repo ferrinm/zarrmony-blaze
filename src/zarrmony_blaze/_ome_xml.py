@@ -125,8 +125,13 @@ def parse_master_xml(xml: str) -> BlazeOme:
         v = pixels.attrib.get(attr)
         return float(v) if v is not None else None
 
+    # OME 2008-02 (real MACS iQ) puts channels as <LogicalChannel> directly
+    # under <Image>; <Channel> under <Pixels> is a 2011-06+ convention. Try
+    # the newer placement first (matches synthesised fixtures), fall back to
+    # the legacy one.
+    channel_elements = pixels.findall(_q("Channel")) or image.findall(_q("LogicalChannel"))
     channel_names: list[str] = []
-    for idx, ch in enumerate(pixels.findall(_q("Channel"))):
+    for idx, ch in enumerate(channel_elements):
         name = (
             ch.attrib.get("Name")
             or ch.attrib.get("Fluor")
@@ -136,7 +141,8 @@ def parse_master_xml(xml: str) -> BlazeOme:
         channel_names.append(name)
     if len(channel_names) != size_c:
         raise BlazeMetadataError(
-            f"<Channel> count ({len(channel_names)}) does not match SizeC ({size_c})"
+            f"channel element count ({len(channel_names)}) does not match SizeC ({size_c}) — "
+            f"looked under <Pixels>/<Channel> and <Image>/<LogicalChannel>"
         )
 
     file_map: dict[tuple[int, int, int], str] = {}
